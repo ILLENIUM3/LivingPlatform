@@ -1,0 +1,62 @@
+server:
+  address: ${HTTP_BIND_ADDRESS:127.0.0.1}
+  port: ${USER_HTTP_PORT:8081}
+spring:
+  application:
+    name: live-user-provider
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:16379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      connect-timeout: 500ms
+      timeout: 500ms
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:13306}/${MYSQL_DATABASE:live_platform}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&sslMode=DISABLED&allowPublicKeyRetrieval=true&connectTimeout=2000&socketTimeout=3000
+    username: ${MYSQL_USER:live_app}
+    password: ${MYSQL_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 2000
+      initialization-fail-timeout: 5000
+  sql:
+    init:
+      mode: never
+dubbo:
+  application:
+    name: ${spring.application.name}
+    qos-enable: false
+    register-mode: instance
+  registry:
+    address: nacos://${NACOS_HOST:127.0.0.1}:${NACOS_PORT:18848}
+    group: live-platform
+    username: ${NACOS_USERNAME:}
+    password: ${NACOS_PASSWORD:}
+  protocol:
+    name: dubbo
+    host: ${DUBBO_HOST:127.0.0.1}
+    port: ${USER_RPC_PORT:20880}
+    serialization: fastjson2
+  provider:
+    timeout: 5000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+logging:
+  level:
+    org.apache.dubbo: WARN
+    com.alibaba.nacos: WARN
+live:
+  user-cache:
+    enabled: ${USER_CACHE_ENABLED:true}
+    key-prefix: ${USER_CACHE_KEY_PREFIX:live-platform:dev:user:v1:}
+    ttl-seconds: 1800
+    jitter-seconds: 300
+    null-ttl-seconds: 30
+    null-jitter-seconds: 10

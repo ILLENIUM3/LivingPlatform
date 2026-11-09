@@ -1,0 +1,56 @@
+name: live-platform
+services:
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # 本阶段只保存可重建的用户缓存，不承载钱包、会话或锁。
+  mysql:
+    image: mysql:8.4.7
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Copy .env.example to .env first}
+      MYSQL_DATABASE: live_platform
+      MYSQL_USER: live_app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:13306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../sql/001-bootstrap.sql:/docker-entrypoint-initdb.d/001-bootstrap.sql:ro
+      - ../sql/002-user.sql:/docker-entrypoint-initdb.d/002-user.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u live_app live_platform -Nse 'SELECT probe_value FROM platform_bootstrap WHERE id=1'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+  nacos:
+    image: nacos/nacos-server:v2.5.1
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      JVM_XMN: 128m
+    ports:
+      - "127.0.0.1:18848:8848"
+      # Nacos 客户端按 HTTP 端口 + 1000 计算 gRPC 端口。
+      - "127.0.0.1:19848:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8848/nacos/v1/console/health/readiness || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+volumes:
+  mysql-data:
+  nacos-data:

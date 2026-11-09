@@ -1,0 +1,8 @@
+### API 进程健康；不能代替完整链路检查
+GET http://127.0.0.1:8080/actuator/health
+
+### 用户服务健康（包含数据源连接）
+GET http://127.0.0.1:8081/actuator/health
+
+### 真实 RPC + 数据库读取
+GET http://127.0.0.1:8080/api/system/user-service

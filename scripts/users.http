@@ -1,0 +1,24 @@
+### API 需启用 local profile；先执行 sql/002-user.sql
+@base = http://127.0.0.1:8080
+@userId = 1
+
+### 创建；将返回的字符串 ID 填入 userId
+POST {{base}}/api/dev/users
+Content-Type: application/json
+
+{"nickname":"第一位主播","avatarUrl":""}
+
+### 查询当前 version
+GET {{base}}/api/dev/users/{{userId}}
+
+### 完整替换资料；version 必须来自最近一次查询
+PUT {{base}}/api/dev/users/{{userId}}/profile
+Content-Type: application/json
+
+{"nickname":"新的昵称","avatarUrl":"https://example.com/avatar.png","version":0}
+
+### 再次使用旧 version 应得到 409
+PUT {{base}}/api/dev/users/{{userId}}/profile
+Content-Type: application/json
+
+{"nickname":"过期修改","avatarUrl":"","version":0}

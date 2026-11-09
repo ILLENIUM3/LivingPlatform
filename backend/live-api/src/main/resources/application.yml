@@ -1,0 +1,31 @@
+server:
+  address: ${HTTP_BIND_ADDRESS:127.0.0.1}
+  port: ${API_PORT:8080}
+spring:
+  application:
+    name: live-api
+dubbo:
+  application:
+    name: ${spring.application.name}
+    qos-enable: false
+  registry:
+    address: nacos://${NACOS_HOST:127.0.0.1}:${NACOS_PORT:18848}
+    group: live-platform
+    username: ${NACOS_USERNAME:}
+    password: ${NACOS_PASSWORD:}
+  consumer:
+    check: false
+    retries: 0
+    timeout: 5000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+logging:
+  level:
+    org.apache.dubbo: WARN
+    com.alibaba.nacos: WARN
