@@ -1,0 +1,40 @@
+@baseUrl = http://127.0.0.1:8080
+@phone = 13800138000
+@code = 复制获取接口返回的六位mockCode
+@token = 复制登录接口返回的token
+
+### Provider 需 local profile + AUTH_MOCK_ENABLED=true；60秒内重复申请返回429
+POST {{baseUrl}}/api/auth/code
+Content-Type: application/json
+
+{"phone":"{{phone}}"}
+
+### 首次自动注册；后续复用用户ID。验证码必须使用字符串，保留前导零
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{"phone":"{{phone}}","code":"{{code}}"}
+
+### 查询当前用户；身份来自Token
+GET {{baseUrl}}/api/users/me
+Authorization: Bearer {{token}}
+
+### 未携带Token，即使伪造用户ID也返回401
+GET {{baseUrl}}/api/users/me?userId=1
+X-User-Id: 1
+
+### 退出；同一个格式正确的Token重复退出成功
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+### 退出后旧Token返回401
+GET {{baseUrl}}/api/users/me
+Authorization: Bearer {{token}}
+
+### 同一个验证码重复登录返回400 AUTH_CODE_INVALID
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{"phone":"{{phone}}","code":"{{code}}"}
+
+### 等待发送冷却后，重新获取验证码并登录；user.id应与首次一致

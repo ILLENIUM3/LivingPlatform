@@ -1,5 +1,9 @@
 # 直播平台
 
+阶段 03 登录注册与会话代码已完成：本地模拟验证码、手机号唯一约束与自动注册、Redis Token、当前用户查询、固定过期及退出。学习与启动入口见 [登录注册与会话](docs/07-阶段03-登录注册与会话.md)，请求样例见 `scripts/auth.http`。已有数据库需补执行 `sql/003-user-phone.sql`；Provider 需 `local` profile 和 `AUTH_MOCK_ENABLED=true` 才会回显模拟验证码，API 无需开启 local。下一阶段：Gateway 与登录页面。
+
+热点缓存重建锁已实现：按用户加锁、二次检查、有限等待、Lua 安全解锁及持锁回填。学习入口见 `docs/06-热点缓存重建锁.md`；它只用于减少重复查库，不保证数据库与缓存强一致。
+
 用户缓存基础代码已接入：Cache Aside、短期空值缓存、TTL 抖动、事务提交后删除缓存，以及 Redis 故障时回退数据库。配置与一致性边界见 `docs/05-用户缓存基础设计.md`；部署时需启动新增 Redis 服务并重新打包、启动 Provider。
 
 参考 qiyu-live 的模块设计，逐步实现自己的个人直播项目。阶段 01 已完成；阶段 02 用户基础业务代码已完成并通过编译检查，待执行新增 SQL 和 Maven 打包后使用。
@@ -16,7 +20,7 @@ GET /api/system/user-service
   → MySQL：读取 platform_bootstrap 中的初始化记录
 ```
 
-接口不返回硬编码的数据库成功状态。每次请求都会访问数据库，依赖不可用时返回 HTTP 503。用户注册、登录和直播间业务在后续阶段开发。
+探针接口不返回硬编码的数据库成功状态，每次请求都会访问数据库，依赖不可用时返回 HTTP 503。当前已实现验证码登录后自动注册、`GET /api/users/me` 与 `POST /api/auth/logout`；直播间业务仍在后续阶段开发。
 
 ## 工程结构
 
@@ -24,9 +28,9 @@ GET /api/system/user-service
 | --- | --- |
 | `backend/live-common` | HTTP 统一响应 |
 | `backend/live-user-interface` | 用户服务 RPC 接口和可序列化 DTO；不依赖 Spring |
-| `backend/live-user-provider` | RPC 实现、数据库连接、数据库探针 |
+| `backend/live-user-provider` | 用户业务、缓存、验证码与会话、数据库探针、RPC 实现 |
 | `backend/live-api` | HTTP 入口、RPC 调用和异常响应 |
-| `deploy` | 本地 MySQL、Nacos 的 Compose 配置 |
+| `deploy` | 本地 MySQL、Nacos、Redis 的 Compose 配置 |
 | `sql` | 编号数据库脚本 |
 | `scripts` | 验收脚本、HTTP 请求样例 |
 | `docs` | 开发路线与阶段记录 |
@@ -43,10 +47,11 @@ API 只依赖用户服务的接口包，不依赖 Provider 实现。两个可启
 | Dubbo | 3.3.7 | 用户 RPC 20880 |
 | MySQL | Docker 镜像 `mysql:8.4.7` | 13306 → 容器 3306 |
 | Nacos | Docker 镜像 `nacos/nacos-server:v2.5.1` | 18848 → 8848，19848 → 9848 |
+| Redis | Docker 镜像 `redis:7.4.2-alpine` | 16379 → 6379 |
 
 Nacos 客户端的 gRPC 端口是配置的 HTTP 端口加 1000，两者都要可连接。Docker 配置只将端口发布到本机。Nacos 使用单机内嵌存储，本地关闭鉴权；这份 Compose 用于本机学习。
 
-第一阶段采用 Dubbo 核心 Starter 和 Nacos Starter，不引入当前尚未使用的 Spring Cloud、Gateway、Redis、Kafka 或分表组件。MySQL JDBC 驱动版本由 Spring Boot 依赖管理统一控制。
+工程采用 Dubbo 核心 Starter 和 Nacos Starter，用户缓存阶段已接入 Redis；Gateway、Kafka 和分表组件后续按阶段加入。MySQL JDBC 驱动版本由 Spring Boot 依赖管理统一控制。
 
 ## 启动步骤（Windows PowerShell）
 
@@ -60,7 +65,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --wait
 mvn -f backend/pom.xml clean verify
 ```
 
-MySQL 首次使用空数据卷启动时自动执行 `sql/001-bootstrap.sql`。已有数据卷不会重新执行初始化脚本，后续表结构变化须单独执行相应 SQL。
+MySQL 首次使用空数据卷启动时依次执行 `sql/001-bootstrap.sql`、`sql/002-user.sql`、`sql/003-user-phone.sql`。已有数据卷不会重新执行初始化脚本，需单独补执行尚未应用的 SQL。
 
 在终端 A 启动用户服务（密码应与 `deploy/.env` 中的 MYSQL_PASSWORD 一致）：
 
@@ -126,7 +131,7 @@ WSL/Linux 下 Maven 和 JAR 命令相同，环境变量使用 `export MYSQL_PASS
 
 ## 验证与学习入口
 
-`mvn -f backend/pom.xml clean verify` 运行六个自动化测试：数据库实时读取、缺少初始化记录、缺少表、RPC 成功响应、RPC 不可达、远端数据库异常。数据库单元测试使用仅在 test 范围引入的 H2；实际链路另用 MySQL 和 Nacos 验收。
+`mvn -f backend/pom.xml clean verify` 运行现有自动化测试，包括初始六个探针测试、缓存锁测试和登录会话测试。数据库单元测试使用仅在 test 范围引入的 H2；实际链路另用 MySQL 和 Nacos 验收。登录阶段的聚焦验证结果见 `docs/07-阶段03-登录注册与会话.md`。
 
 开发路线见 `docs/01-直播平台开发流程.md`，本轮操作与验收结果见 `docs/02-阶段01-工程搭建与验收.md`。
 

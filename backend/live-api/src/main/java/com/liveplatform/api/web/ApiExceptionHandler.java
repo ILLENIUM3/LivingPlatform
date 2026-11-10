@@ -25,9 +25,14 @@ public class ApiExceptionHandler {
             case "USER_NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "USER_DISABLED" -> HttpStatus.FORBIDDEN;
             case "USER_VERSION_CONFLICT" -> HttpStatus.CONFLICT;
+            case "AUTH_UNAUTHENTICATED" -> HttpStatus.UNAUTHORIZED;
+            case "AUTH_CODE_TOO_FREQUENT" -> HttpStatus.TOO_MANY_REQUESTS;
+            case "AUTH_CODE_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
             default -> HttpStatus.BAD_REQUEST;
         };
-        return ResponseEntity.status(status).body(new ApiResponse<>(exception.getCode(),
+        var response = ResponseEntity.status(status).header("Cache-Control", "no-store");
+        if (status == HttpStatus.UNAUTHORIZED) { response.header("WWW-Authenticate", "Bearer"); }
+        return response.body(new ApiResponse<>(exception.getCode(),
                 exception.getMessage(), null, UUID.randomUUID().toString()));
     }
 
@@ -41,7 +46,10 @@ public class ApiExceptionHandler {
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     public ApiResponse<Void> unavailable(DependencyUnavailableException exception) {
         String requestId = UUID.randomUUID().toString();
-        LOG.warn("Dependency probe failed, requestId={}", requestId, exception);
+        // RPC 异常消息可能携带调用参数；不把验证码或 Token 写入应用日志。
+        LOG.warn("Dependency unavailable, requestId={}, causeType={}", requestId,
+                exception.getCause() == null ? exception.getClass().getSimpleName()
+                        : exception.getCause().getClass().getSimpleName());
         return ApiResponse.unavailable(requestId);
     }
 }

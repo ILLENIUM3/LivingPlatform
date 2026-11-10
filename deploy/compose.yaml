@@ -2,7 +2,7 @@ name: live-platform
 services:
   redis:
     image: redis:7.4.2-alpine
-    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction", "--save", "", "--appendonly", "no"]
     ports:
       - "127.0.0.1:16379:6379"
     healthcheck:
@@ -10,7 +10,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    # 本阶段只保存可重建的用户缓存，不承载钱包、会话或锁。
+    # 缓存与登录共用学习实例，禁止淘汰验证码限流状态；满内存时登录写入失败。
+    # 不持久化：重启后会话失效，需要重新登录。后续部署再隔离缓存和认证存储。
   mysql:
     image: mysql:8.4.7
     environment:
@@ -24,6 +25,7 @@ services:
       - mysql-data:/var/lib/mysql
       - ../sql/001-bootstrap.sql:/docker-entrypoint-initdb.d/001-bootstrap.sql:ro
       - ../sql/002-user.sql:/docker-entrypoint-initdb.d/002-user.sql:ro
+      - ../sql/003-user-phone.sql:/docker-entrypoint-initdb.d/003-user-phone.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u live_app live_platform -Nse 'SELECT probe_value FROM platform_bootstrap WHERE id=1'"]
       interval: 5s

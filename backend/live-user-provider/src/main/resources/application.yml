@@ -53,6 +53,14 @@ logging:
     org.apache.dubbo: WARN
     com.alibaba.nacos: WARN
 live:
+  auth:
+    # 只有 Provider 同时激活 local profile 才会回显模拟验证码。
+    mock-enabled: ${AUTH_MOCK_ENABLED:false}
+    key-prefix: ${AUTH_KEY_PREFIX:live-platform:dev:auth:v1:}
+    code-ttl-seconds: ${AUTH_CODE_TTL_SECONDS:300}
+    resend-seconds: ${AUTH_RESEND_SECONDS:60}
+    max-attempts: ${AUTH_MAX_ATTEMPTS:5}
+    session-ttl-seconds: ${AUTH_SESSION_TTL_SECONDS:604800}
   user-cache:
     enabled: ${USER_CACHE_ENABLED:true}
     key-prefix: ${USER_CACHE_KEY_PREFIX:live-platform:dev:user:v1:}
@@ -60,3 +68,7 @@ live:
     jitter-seconds: 300
     null-ttl-seconds: 30
     null-jitter-seconds: 10
+    rebuild-lock:
+      lease-millis: ${USER_CACHE_LOCK_LEASE_MILLIS:5000}
+      wait-millis: ${USER_CACHE_LOCK_WAIT_MILLIS:200}
+      poll-millis: ${USER_CACHE_LOCK_POLL_MILLIS:40}

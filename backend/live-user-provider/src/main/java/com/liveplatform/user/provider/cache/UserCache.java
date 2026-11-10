@@ -12,13 +12,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.Duration;
+import java.util.List;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Component
 @EnableConfigurationProperties(UserCacheProperties.class)
 public class UserCache {
     private static final Logger LOG = LoggerFactory.getLogger(UserCache.class);
+    private static final DefaultRedisScript<Long> FILL_IF_OWNED = new DefaultRedisScript<>();
+    static {
+        FILL_IF_OWNED.setLocation(new ClassPathResource("redis/fill-user-cache-if-owned.lua"));
+        FILL_IF_OWNED.setResultType(Long.class);
+    }
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
     private final UserCacheProperties properties;
@@ -59,16 +66,22 @@ public class UserCache {
         }
     }
 
-    public void put(long userId, UserDTO user) {
+    public void putIfOwned(long userId, UserDTO user, String token) {
         if (!properties.enabled()) { return; }
         boolean missing = user == null;
         //空值写入
         long base = missing ? properties.nullTtlSeconds() : properties.ttlSeconds();
         long jitter = missing ? properties.nullJitterSeconds() : properties.jitterSeconds();
-        Duration ttl = Duration.ofSeconds(base + ThreadLocalRandom.current().nextLong(jitter + 1));
+        long ttlSeconds = base + ThreadLocalRandom.current().nextLong(jitter + 1);
         //过期时间
         try {
-            redis.opsForValue().set(key(userId), mapper.writeValueAsString(new Entry(1, missing, user)), ttl);
+            // 检查所有权与写缓存必须原子完成，不能先 GET 锁再单独 SET 缓存。
+            //redis.execute执行了lua脚本，仍持有锁才回填缓存,原子性
+            Long written = redis.execute(FILL_IF_OWNED, List.of(key(userId) + ":rebuild-lock", key(userId)),
+                    token, mapper.writeValueAsString(new Entry(1, missing, user)), Long.toString(ttlSeconds));
+            if (!Long.valueOf(1).equals(written)) {
+                LOG.debug("Skip user cache fill: lease lost, userId={}", userId);
+            }
         } catch (DataAccessException | JsonProcessingException exception) {
             // 缓存写入失败不改变数据库查询结果。
             LOG.warn("User cache fill failed, userId={}, reason={}", userId, exception.getClass().getSimpleName());
@@ -76,6 +89,7 @@ public class UserCache {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    //Spring根据事务监听方法create,代理对象思想,调用create或者updateProfile()方法
     //事务提交时才更新数据key,回滚时不删除,phase = TransactionPhase.AFTER_COMMIT
     //定义删除缓存方法，用户数据改变
     public void onUserChanged(UserChangedEvent event) {

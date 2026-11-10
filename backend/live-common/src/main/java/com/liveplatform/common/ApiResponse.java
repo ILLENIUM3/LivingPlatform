@@ -9,6 +9,6 @@ public record ApiResponse<T>(String code, String message, T data, String request
     }
 
     public static ApiResponse<Void> unavailable(String requestId) {
-        return new ApiResponse<>("DEPENDENCY_UNAVAILABLE", "用户服务或数据库暂不可用", null, requestId);
+        return new ApiResponse<>("DEPENDENCY_UNAVAILABLE", "用户服务或存储暂不可用", null, requestId);
     }
 }

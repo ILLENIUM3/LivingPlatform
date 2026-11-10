@@ -4,7 +4,7 @@ import com.liveplatform.user.api.UserBusinessException;
 import com.liveplatform.user.api.UserDTO;
 import com.liveplatform.user.provider.dao.UserRepository;
 import com.liveplatform.user.provider.dao.UserRow;
-import com.liveplatform.user.provider.cache.UserCache;
+import com.liveplatform.user.provider.cache.UserCacheLoader;
 import com.liveplatform.user.provider.cache.UserChangedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -18,12 +18,12 @@ import java.time.ZoneOffset;
 @Service
 public class UserService {
     private final UserRepository repository;
-    private final UserCache cache;
+    private final UserCacheLoader cacheLoader;
     private final ApplicationEventPublisher events;
 
-    public UserService(UserRepository repository, UserCache cache, ApplicationEventPublisher events) {
+    public UserService(UserRepository repository, UserCacheLoader cacheLoader, ApplicationEventPublisher events) {
         this.repository = repository;
-        this.cache = cache;
+        this.cacheLoader = cacheLoader;
         this.events = events;
     }
 
@@ -43,13 +43,7 @@ public class UserService {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             return dto(requireUser(id));
         }
-        UserCache.Lookup lookup = cache.get(id);
-        if (lookup.hit()) {
-            if (lookup.user() == null) { throw notFound(); }
-            return lookup.user();
-        }
-        UserDTO user = repository.findById(id).map(this::dto).orElse(null);
-        cache.put(id, user);
+        UserDTO user = cacheLoader.get(id, () -> repository.findById(id).map(this::dto).orElse(null));
         if (user == null) { throw notFound(); }
         return user;
     }
